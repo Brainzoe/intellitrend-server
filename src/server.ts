@@ -13,7 +13,7 @@ const app = express();
 // Allowed origins from environment variables
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",");
 
-app.use(cors({
+app.use("*",cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps, Postman)
     if (!origin) return callback(null, true);
