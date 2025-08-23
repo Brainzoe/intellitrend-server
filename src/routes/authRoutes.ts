@@ -1,6 +1,14 @@
 // src/routes/authRoutes.ts
 import { Router } from "express";
-import { register, login, me, checkFirstAdmin, resetFirstAdmin } from "../controllers/authController";
+import {
+  register,
+  login,
+  me,
+  checkFirstAdmin,
+  resetFirstAdmin,
+  requestPasswordReset,
+  resetPassword,
+} from "../controllers/authController";
 import { protect, adminOnly } from "../middleware/auth";
 
 const router = Router();
@@ -19,5 +27,12 @@ router.get("/check-first-admin", checkFirstAdmin);
 
 // Reset first admin (admin-only route)
 router.post("/reset-first-admin", protect, adminOnly, resetFirstAdmin);
+
+// ================= PASSWORD RESET =================
+// Request a password reset (sends email with token)
+router.post("/request-password-reset", requestPasswordReset);
+
+// Reset password using the token
+router.post("/reset-password", resetPassword);
 
 export default router;

@@ -7,26 +7,43 @@ import nodemailer from "nodemailer";
 import User, { IUser } from "../models/User";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+
+// Nodemailer transporter setup
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
+  secure: Number(process.env.SMTP_PORT) === 465, // true for 465, false for others
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// Utility function to send email
+const sendEmail = async (to: string, subject: string, html: string) => {
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to,
+    subject,
+    html,
+  });
+};
 
 // ================= REGISTER =================
 export const register = async (req: any, res: Response) => {
   try {
     const { username, email, password, role, adminSecret } = req.body;
-
-    // Check if first admin exists
     const adminExists = await User.anyAdminExists();
-
     let assignedRole: "user" | "admin" = "user";
 
     if (role === "admin") {
       if (!adminExists) {
-        // First admin registration
         if (adminSecret !== process.env.ADMIN_SECRET) {
           return res.status(403).json({ message: "Invalid admin registration secret" });
         }
         assignedRole = "admin";
       } else {
-        // Subsequent admins require logged-in admin
         if (!req.user || req.user.role !== "admin") {
           return res.status(403).json({ message: "Only existing admins can register new admins" });
         }
@@ -34,16 +51,8 @@ export const register = async (req: any, res: Response) => {
       }
     }
 
-    // Hash password before saving
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = new User({
-      username,
-      email,
-      password: hashedPassword,
-      role: assignedRole,
-    });
-
+    const user = new User({ username, email, password: hashedPassword, role: assignedRole });
     await user.save();
 
     res.status(201).json({
@@ -60,24 +69,16 @@ export const register = async (req: any, res: Response) => {
 export const login = async (req: Request, res: Response) => {
   try {
     const { emailOrUsername, password } = req.body;
-
     const user = await User.findOne({
       $or: [{ email: emailOrUsername }, { username: emailOrUsername }],
     });
-
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    res.json({
-      token,
-      user: { id: user._id, username: user.username, role: user.role },
-    });
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token, user: { id: user._id, username: user.username, role: user.role } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Login failed", error: err });
@@ -120,7 +121,6 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Generate reset token
     const resetToken = crypto.randomBytes(32).toString("hex");
     const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
 
@@ -128,24 +128,13 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     user.passwordResetExpires = new Date(Date.now() + 3600 * 1000); // 1 hour
     await user.save();
 
-    // Send email with token (using nodemailer)
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+    const resetURL = `${FRONTEND_URL}/reset-password/${resetToken}`;
+    const emailHtml = `<p>Hello ${user.username},</p>
+      <p>You requested a password reset. Click the link below to reset your password:</p>
+      <a href="${resetURL}" target="_blank">${resetURL}</a>
+      <p>This link expires in 1 hour.</p>`;
 
-    const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: user.email,
-      subject: "Password Reset",
-      html: `<p>Click <a href="${resetURL}">here</a> to reset your password. Token expires in 1 hour.</p>`,
-    });
+    await sendEmail(user.email, "Password Reset", emailHtml);
 
     res.json({ message: "Password reset email sent" });
   } catch (err) {
@@ -167,11 +156,9 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     if (!user) return res.status(400).json({ message: "Invalid or expired token" });
 
-    // Hash new password
     user.password = await bcrypt.hash(newPassword, 10);
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
-
     await user.save();
 
     res.json({ message: "Password reset successfully" });
