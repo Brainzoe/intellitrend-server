@@ -10,34 +10,27 @@ export const register = async (req: Request, res: Response) => {
   try {
     const { username, email, password, role, adminSecret } = req.body;
 
-    // Check if this is an admin registration attempt
+    const adminExists = await User.findOne({ role: "admin" });
+
     let assignedRole: "user" | "admin" = "user";
 
     if (role === "admin") {
-      const existingAdmin = await User.findOne({ role: "admin" });
-      if (existingAdmin) {
-        return res.status(400).json({ message: "Admin already exists" });
+      if (!adminExists) {
+        // First admin registration
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+          return res.status(403).json({ message: "Invalid admin registration secret" });
+        }
+        assignedRole = "admin";
+      } else {
+        // Subsequent admins require logged-in admin
+        if (!req.user || req.user.role !== "admin") {
+          return res.status(403).json({ message: "Only existing admins can register new admins" });
+        }
+        assignedRole = "admin";
       }
-      if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
-        return res.status(403).json({ message: "Invalid admin registration secret" });
-      }
-      assignedRole = "admin";
     }
 
-    // Check if a user with the same email exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "Email already in use" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = new User({
-      username,
-      email,
-      password: hashedPassword,
-      role: assignedRole,
-    });
+    const user = new User({ username, email, password, role: assignedRole });
     await user.save();
 
     res.status(201).json({
@@ -48,6 +41,7 @@ export const register = async (req: Request, res: Response) => {
     res.status(400).json({ message: "Registration failed", error: err });
   }
 };
+
 
 // ================= LOGIN =================
 export const login = async (req: Request, res: Response) => {
