@@ -32,7 +32,6 @@ const transporter = nodemailer.createTransport({
 
 // Utility function to send email
 const sendEmail = async (to: string, subject: string, html: string) => {
-  if (!process.env.EMAIL_HOST) throw new Error("SMTP host is missing");
   try {
     await transporter.sendMail({
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
@@ -42,10 +41,11 @@ const sendEmail = async (to: string, subject: string, html: string) => {
     });
     console.log(`Email sent to ${to}`);
   } catch (err: any) {
-    console.error("Failed to send email:", err.message || err);
-    throw new Error("Email sending failed. Check SMTP configuration.");
+    console.error("Failed to send email:", err); // log full error object
+    throw new Error(`Email send failed: ${err.message}`);
   }
 };
+
 
 // ================= REGISTER =================
 export const register = async (req: any, res: Response) => {
