@@ -5,15 +5,22 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import User, { IUser } from "../models/User";
+import dotenv from "dotenv";
+
+dotenv.config(); // ensure env vars are loaded
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
-// Nodemailer transporter setup
+// ---------------- Nodemailer Setup ----------------
+if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  console.warn("SMTP credentials are missing. Password reset emails will fail.");
+}
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
-  secure: Number(process.env.SMTP_PORT) === 465, // true for 465, false for others
+  secure: Number(process.env.SMTP_PORT) === 465, // true for 465
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -22,12 +29,18 @@ const transporter = nodemailer.createTransport({
 
 // Utility function to send email
 const sendEmail = async (to: string, subject: string, html: string) => {
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM,
-    to,
-    subject,
-    html,
-  });
+  try {
+    if (!process.env.SMTP_HOST) throw new Error("SMTP host is missing");
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to,
+      subject,
+      html,
+    });
+  } catch (err) {
+    console.error("Failed to send email:", err);
+    throw err;
+  }
 };
 
 // ================= REGISTER =================
@@ -137,9 +150,9 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     await sendEmail(user.email, "Password Reset", emailHtml);
 
     res.json({ message: "Password reset email sent" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to send password reset email", error: err });
+  } catch (err: any) {
+    console.error("Password reset request failed:", err);
+    res.status(500).json({ message: err.message || "Failed to send password reset email", error: err });
   }
 };
 
