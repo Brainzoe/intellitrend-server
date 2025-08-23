@@ -13,37 +13,37 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
 // ---------------- Nodemailer Setup ----------------
-if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.warn("SMTP credentials are missing. Password reset emails will fail.");
 }
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: Number(process.env.EMAIL_PORT),
-  secure: false, // TLS over 587
+  secure: Number(process.env.EMAIL_PORT) === 465, // true for SSL, false for TLS (587)
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
   tls: {
-    rejectUnauthorized: false, // allow self-signed certs
+    rejectUnauthorized: false, // useful for dev, remove in production
   },
 });
 
-
 // Utility function to send email
 const sendEmail = async (to: string, subject: string, html: string) => {
+  if (!process.env.EMAIL_HOST) throw new Error("SMTP host is missing");
   try {
-    if (!process.env.SMTP_HOST) throw new Error("SMTP host is missing");
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to,
       subject,
       html,
     });
-  } catch (err) {
-    console.error("Failed to send email:", err);
-    throw err;
+    console.log(`Email sent to ${to}`);
+  } catch (err: any) {
+    console.error("Failed to send email:", err.message || err);
+    throw new Error("Email sending failed. Check SMTP configuration.");
   }
 };
 
@@ -151,9 +151,12 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
       <a href="${resetURL}" target="_blank">${resetURL}</a>
       <p>This link expires in 1 hour.</p>`;
 
-    await sendEmail(user.email, "Password Reset", emailHtml);
-
-    res.json({ message: "Password reset email sent" });
+    try {
+      await sendEmail(user.email, "Password Reset", emailHtml);
+      res.json({ message: "Password reset email sent" });
+    } catch (emailErr: any) {
+      res.status(500).json({ message: "Password reset email could not be sent", error: emailErr });
+    }
   } catch (err: any) {
     console.error("Password reset request failed:", err);
     res.status(500).json({ message: err.message || "Failed to send password reset email", error: err });
