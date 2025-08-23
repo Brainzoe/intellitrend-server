@@ -15,32 +15,7 @@ export const findCommentById = (comments: IComment[], id: string): IComment | nu
 // ✅ Apply a reaction with toggle logic
 // src/controllers/utils.ts
 
-/**
- * Handles adding/removing/toggling reactions for posts, comments, and replies.
- */
-// export const applyReaction = (target: any, type: string, userId: string) => {
-//     if (!target.reactions) target.reactions = {};
-//     if (!target.reactedBy) target.reactedBy = {};
 
-//     const prevReaction = target.reactedBy[userId];
-
-//     if (prevReaction === type) {
-//       // 🔄 Same reaction clicked again → remove it
-//       target.reactions[type] = (target.reactions[type] || 1) - 1;
-//       if (target.reactions[type] <= 0) delete target.reactions[type];
-//       delete target.reactedBy[userId];
-//     } else {
-//       // 🔄 Switching reaction or new reaction
-//       if (prevReaction) {
-//         // Decrease previous reaction count
-//         target.reactions[prevReaction] = (target.reactions[prevReaction] || 1) - 1;
-//         if (target.reactions[prevReaction] <= 0) delete target.reactions[prevReaction];
-//       }
-//       // Add new one
-//       target.reactions[type] = (target.reactions[type] || 0) + 1;
-//       target.reactedBy[userId] = type;
-//     }
-//   };
 export const applyReaction = (target: any, type: string, userId: string) => {
   if (!target.reactions) target.reactions = new Map();
   if (!target.reactedBy) target.reactedBy = new Map();

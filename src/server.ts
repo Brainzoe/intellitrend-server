@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./utils/db";
 import postRoutes from "./routes/postRoutes";
+import authRoutes from "./routes/authRoutes";
 
 dotenv.config();
 connectDB();
@@ -30,6 +31,6 @@ app.use(cors({
 
 app.use(express.json());
 app.use("/api/posts", postRoutes);
-
+app.use("/api/auth", authRoutes);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
