@@ -6,10 +6,11 @@ import User from "../models/User";
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 
 // ================= REGISTER =================
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: any, res: Response) => {
   try {
     const { username, email, password, role, adminSecret } = req.body;
 
+    // Check if an admin already exists
     const adminExists = await User.findOne({ role: "admin" });
 
     let assignedRole: "user" | "admin" = "user";
@@ -30,7 +31,16 @@ export const register = async (req: Request, res: Response) => {
       }
     }
 
-    const user = new User({ username, email, password, role: assignedRole });
+    // Hash password before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      username,
+      email,
+      password: hashedPassword,
+      role: assignedRole,
+    });
+
     await user.save();
 
     res.status(201).json({
@@ -38,10 +48,10 @@ export const register = async (req: Request, res: Response) => {
       user: { username, email, role: assignedRole },
     });
   } catch (err) {
+    console.error(err);
     res.status(400).json({ message: "Registration failed", error: err });
   }
 };
-
 
 // ================= LOGIN =================
 export const login = async (req: Request, res: Response) => {
@@ -52,10 +62,11 @@ export const login = async (req: Request, res: Response) => {
     const user = await User.findOne({
       $or: [{ email: emailOrUsername }, { username: emailOrUsername }],
     });
+
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    // Compare the hashed password
-    const isMatch = await user.comparePassword(password);
+    // Compare password
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, {
@@ -67,17 +78,17 @@ export const login = async (req: Request, res: Response) => {
       user: { id: user._id, username: user.username, role: user.role },
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Login failed", error: err });
   }
 };
-
 
 // ================= ME =================
 export const me = async (req: any, res: Response) => {
   try {
     res.json(req.user);
-  } catch {
-    res.status(500).json({ message: "Error fetching user" });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching user", error: err });
   }
 };
 
@@ -87,7 +98,7 @@ export const checkFirstAdmin = async (req: Request, res: Response) => {
     const adminExists = await User.findOne({ role: "admin" });
     res.status(200).json({ exists: !!adminExists });
   } catch (err) {
-    res.status(500).json({ message: "Failed to check first admin" });
+    res.status(500).json({ message: "Failed to check first admin", error: err });
   }
 };
 
@@ -97,6 +108,6 @@ export const resetFirstAdmin = async (req: Request, res: Response) => {
     await User.updateMany({ role: "admin" }, { role: "user" });
     res.json({ message: "First admin reset. You can register again." });
   } catch (err) {
-    res.status(500).json({ message: "Failed to reset first admin" });
+    res.status(500).json({ message: "Failed to reset first admin", error: err });
   }
 };
