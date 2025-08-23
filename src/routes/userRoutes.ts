@@ -1,3 +1,4 @@
+//routes/userRoutes
 import { Router } from "express";
 import { register, login, me } from "../controllers/authController";
 import { protect } from "../middleware/auth";

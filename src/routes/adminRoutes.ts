@@ -12,12 +12,11 @@ import {
   addReplyReaction,
   sharePost,
 } from "../controllers/postController";
-import { protect } from "../middleware/auth";
-
+import { protect, adminOnly } from "../middleware/auth";
 const router = Router();
 
 // All admin routes protected
-router.use(protect);
+router.use(protect, adminOnly);
 
 // ---------------- POSTS ----------------
 router.get("/posts", getPosts);
