@@ -7,6 +7,8 @@ export interface IUser extends Document {
   email: string;
   password: string;
   role: "user" | "admin";
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -20,6 +22,8 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: String, enum: ["user", "admin"], default: "user" },
+    passwordResetToken: { type: String },  // optional
+    passwordResetExpires: { type: Date },  // optional
   },
   { timestamps: true }
 );

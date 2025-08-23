@@ -1,7 +1,10 @@
+// src/controllers/authController.ts
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import User from "../models/User";
+import crypto from "crypto";
+import nodemailer from "nodemailer";
+import User, { IUser } from "../models/User";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 
@@ -10,8 +13,8 @@ export const register = async (req: any, res: Response) => {
   try {
     const { username, email, password, role, adminSecret } = req.body;
 
-    // Check if an admin already exists
-    const adminExists = await User.findOne({ role: "admin" });
+    // Check if first admin exists
+    const adminExists = await User.anyAdminExists();
 
     let assignedRole: "user" | "admin" = "user";
 
@@ -58,14 +61,12 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { emailOrUsername, password } = req.body;
 
-    // Find by email or username
     const user = await User.findOne({
       $or: [{ email: emailOrUsername }, { username: emailOrUsername }],
     });
 
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
@@ -95,8 +96,8 @@ export const me = async (req: any, res: Response) => {
 // ================= CHECK-FIRST-ADMIN =================
 export const checkFirstAdmin = async (req: Request, res: Response) => {
   try {
-    const adminExists = await User.findOne({ role: "admin" });
-    res.status(200).json({ exists: !!adminExists });
+    const adminExists = await User.anyAdminExists();
+    res.status(200).json({ exists: adminExists });
   } catch (err) {
     res.status(500).json({ message: "Failed to check first admin", error: err });
   }
@@ -109,5 +110,73 @@ export const resetFirstAdmin = async (req: Request, res: Response) => {
     res.json({ message: "First admin reset. You can register again." });
   } catch (err) {
     res.status(500).json({ message: "Failed to reset first admin", error: err });
+  }
+};
+
+// ================= REQUEST PASSWORD RESET =================
+export const requestPasswordReset = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    user.passwordResetToken = resetTokenHash;
+    user.passwordResetExpires = new Date(Date.now() + 3600 * 1000); // 1 hour
+    await user.save();
+
+    // Send email with token (using nodemailer)
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to: user.email,
+      subject: "Password Reset",
+      html: `<p>Click <a href="${resetURL}">here</a> to reset your password. Token expires in 1 hour.</p>`,
+    });
+
+    res.json({ message: "Password reset email sent" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to send password reset email", error: err });
+  }
+};
+
+// ================= RESET PASSWORD =================
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+    const resetTokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      passwordResetToken: resetTokenHash,
+      passwordResetExpires: { $gt: new Date() },
+    });
+
+    if (!user) return res.status(400).json({ message: "Invalid or expired token" });
+
+    // Hash new password
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    await user.save();
+
+    res.json({ message: "Password reset successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to reset password", error: err });
   }
 };
