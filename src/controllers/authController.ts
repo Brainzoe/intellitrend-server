@@ -48,13 +48,15 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { emailOrUsername, password } = req.body;
 
+    // Find by email or username
     const user = await User.findOne({
       $or: [{ email: emailOrUsername }, { username: emailOrUsername }],
     });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: "Invalid credentials" });
+    // Compare the hashed password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, {
       expiresIn: "7d",
@@ -68,6 +70,7 @@ export const login = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Login failed", error: err });
   }
 };
+
 
 // ================= ME =================
 export const me = async (req: any, res: Response) => {
