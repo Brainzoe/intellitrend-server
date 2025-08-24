@@ -162,13 +162,31 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     await user.save();
 
     const resetURL = `${FRONTEND_URL}/reset-password/${resetToken}`;
+    console.log("Password reset URL:", resetURL); // ✅ log the URL
+
     const emailHtml = `<p>Hello ${user.username},</p>
       <p>You requested a password reset. Click the link below to reset your password:</p>
       <a href="${resetURL}" target="_blank">${resetURL}</a>
       <p>This link expires in 1 hour.</p>`;
 
-    await sendEmail(user.email, "Password Reset", emailHtml);
-    res.json({ message: "Password reset email sent" });
+    // Verify SMTP before sending
+    transporter.verify(async (smtpError: Error | null, success: boolean) => {
+      if (smtpError) {
+        console.error("SMTP verification failed:", smtpError);
+        return res.status(500).json({ message: "Email server is not configured properly", error: smtpError });
+      }
+
+      try {
+        await sendEmail(user.email, "Password Reset", emailHtml);
+        console.log(`Password reset email sent to: ${user.email}`);
+        res.json({ message: "Password reset email sent" });
+      } catch (sendErr: any) {
+        console.error("Failed to send password reset email:", sendErr);
+        res.status(500).json({ message: sendErr.message || "Failed to send password reset email", error: sendErr });
+      }
+    });
+
+
   } catch (err: any) {
     console.error("Password reset request failed:", err);
     res.status(500).json({ message: err.message || "Failed to send password reset email", error: err });
