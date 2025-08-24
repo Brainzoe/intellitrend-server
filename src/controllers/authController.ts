@@ -70,6 +70,7 @@ const generateToken = (res: Response, userId: Types.ObjectId, role: string) => {
 
 // ================= REGISTER =================
 export const register = async (req: any, res: Response) => {
+  console.log("Register body:", req.body); // <--- here
   try {
     const { username, email, password, role, adminSecret } = req.body;
     const adminExists = await User.anyAdminExists();
@@ -102,6 +103,7 @@ export const register = async (req: any, res: Response) => {
     res.status(400).json({ message: "Registration failed", error: err.message });
   }
 };
+
 
 // ================= LOGIN =================
 export const login = async (req: Request, res: Response) => {
