@@ -1,7 +1,6 @@
 // src/controllers/authController.ts
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import User, { IUserDocument } from "../models/User";
@@ -16,31 +15,22 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 // ---------------- Nodemailer Setup ----------------
 const createTransporter = () => {
   if (process.env.EMAIL_USER?.includes("gmail.com")) {
-    // Gmail requires App Passwords
     return nodemailer.createTransport({
       service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     });
   }
 
-  // Fallback: custom SMTP (SendGrid, Mailgun, etc.)
   return nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: Number(process.env.EMAIL_PORT) || 587,
     secure: Number(process.env.EMAIL_PORT) === 465,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
   });
 };
 
 const transporter = createTransporter();
 
-// Utility function to send email
 const sendEmail = async (to: string, subject: string, html: string) => {
   try {
     await transporter.sendMail({
@@ -70,7 +60,7 @@ const generateToken = (res: Response, userId: Types.ObjectId, role: string) => {
 
 // ================= REGISTER =================
 export const register = async (req: any, res: Response) => {
-  console.log("Register body:", req.body); // <--- here
+  console.log("Register body:", req.body);
   try {
     const { username, email, password, role, adminSecret } = req.body;
     const adminExists = await User.anyAdminExists();
@@ -84,11 +74,13 @@ export const register = async (req: any, res: Response) => {
         assignedRole = "admin";
       } else if (!req.user || req.user.role !== "admin") {
         return res.status(403).json({ message: "Only existing admins can register new admins" });
-      } else assignedRole = "admin";
+      } else {
+        assignedRole = "admin";
+      }
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user: IUserDocument = new User({ username, email, password: hashedPassword, role: assignedRole });
+    // Do NOT hash here: pre-save hook handles it
+    const user: IUserDocument = new User({ username, email, password, role: assignedRole });
     await user.save();
 
     const token = generateToken(res, user._id, assignedRole);
@@ -104,7 +96,6 @@ export const register = async (req: any, res: Response) => {
   }
 };
 
-
 // ================= LOGIN =================
 export const login = async (req: Request, res: Response) => {
   try {
@@ -114,7 +105,7 @@ export const login = async (req: Request, res: Response) => {
     });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
     const token = generateToken(res, user._id, user.role);
@@ -202,7 +193,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     if (!user) return res.status(400).json({ message: "Invalid or expired token" });
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = newPassword; // pre-save hook hashes automatically
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();
