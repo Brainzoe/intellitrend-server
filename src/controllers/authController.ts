@@ -31,7 +31,7 @@ const createTransporter = () => {
 
 const transporter = createTransporter();
 
-const sendEmail = async (to: string, subject: string, html: string) => {
+export const sendEmail = async (to: string, subject: string, html: string) => {
   try {
     await transporter.sendMail({
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
