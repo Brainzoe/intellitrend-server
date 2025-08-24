@@ -13,6 +13,8 @@ import {
   sharePost,
 } from "../controllers/postController";
 import { protect, adminOnly } from "../middleware/auth";
+import { changeUserPassword } from "../controllers/adminController";
+
 const router = Router();
 
 // All admin routes protected
@@ -35,5 +37,9 @@ router.post("/posts/:postId/comment/:commentId/reply/:replyId/reaction", addRepl
 
 // ---------------- SHARE ----------------
 router.post("/posts/:postId/share", sharePost);
+
+// ---------------- CHANGE USER PASSWORD ----------------
+router.post("/users/:userId/change-password", changeUserPassword);
+
 
 export default router;
