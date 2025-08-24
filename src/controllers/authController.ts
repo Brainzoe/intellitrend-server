@@ -14,22 +14,31 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
 // ---------------- Nodemailer Setup ----------------
-if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-  console.warn("SMTP credentials are missing. Password reset emails will fail.");
-}
+const createTransporter = () => {
+  if (process.env.EMAIL_USER?.includes("gmail.com")) {
+    // Gmail requires App Passwords
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+  }
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT),
-  secure: Number(process.env.EMAIL_PORT) === 465,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
+  // Fallback: custom SMTP (SendGrid, Mailgun, etc.)
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: Number(process.env.EMAIL_PORT) || 587,
+    secure: Number(process.env.EMAIL_PORT) === 465,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+};
+
+const transporter = createTransporter();
 
 // Utility function to send email
 const sendEmail = async (to: string, subject: string, html: string) => {
@@ -40,9 +49,9 @@ const sendEmail = async (to: string, subject: string, html: string) => {
       subject,
       html,
     });
-    console.log(`Email sent to ${to}`);
+    console.log(`✅ Email sent to ${to}`);
   } catch (err: any) {
-    console.error("Failed to send email:", err);
+    console.error("❌ Failed to send email:", err);
     throw new Error(`Email send failed: ${err.message}`);
   }
 };
@@ -54,7 +63,7 @@ const generateToken = (res: Response, userId: Types.ObjectId, role: string) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
   return token;
 };
@@ -158,38 +167,23 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
 
     user.passwordResetToken = resetTokenHash;
-    user.passwordResetExpires = new Date(Date.now() + 3600 * 1000); // 1 hour
+    user.passwordResetExpires = new Date(Date.now() + 3600 * 1000);
     await user.save();
 
     const resetURL = `${FRONTEND_URL}/reset-password/${resetToken}`;
-    console.log("Password reset URL:", resetURL); // ✅ log the URL
+    console.log("🔗 Password reset URL:", resetURL);
 
     const emailHtml = `<p>Hello ${user.username},</p>
       <p>You requested a password reset. Click the link below to reset your password:</p>
       <a href="${resetURL}" target="_blank">${resetURL}</a>
       <p>This link expires in 1 hour.</p>`;
 
-    // Verify SMTP before sending
-    transporter.verify(async (smtpError: Error | null, success: boolean) => {
-      if (smtpError) {
-        console.error("SMTP verification failed:", smtpError);
-        return res.status(500).json({ message: "Email server is not configured properly", error: smtpError });
-      }
+    await sendEmail(user.email, "Password Reset", emailHtml);
 
-      try {
-        await sendEmail(user.email, "Password Reset", emailHtml);
-        console.log(`Password reset email sent to: ${user.email}`);
-        res.json({ message: "Password reset email sent" });
-      } catch (sendErr: any) {
-        console.error("Failed to send password reset email:", sendErr);
-        res.status(500).json({ message: sendErr.message || "Failed to send password reset email", error: sendErr });
-      }
-    });
-
-
+    res.json({ message: "Password reset email sent" });
   } catch (err: any) {
-    console.error("Password reset request failed:", err);
-    res.status(500).json({ message: err.message || "Failed to send password reset email", error: err });
+    console.error("❌ Password reset request failed:", err);
+    res.status(500).json({ message: err.message || "Failed to send password reset email" });
   }
 };
 
