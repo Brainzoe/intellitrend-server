@@ -14,7 +14,7 @@ import { protect, adminOnly } from "../middleware/auth";
 const router = Router();
 
 // Register a new user (admin or normal user)
-router.post("/register", register);
+router.post("/register",protect, register);
 
 // Login existing user
 router.post("/login", login);
